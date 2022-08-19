@@ -8,4 +8,5 @@ usage: plot_thumb.py [-h] -i INPUT_CSV [-o OUTPUT_PATH]
 Also it has classes to save a PNG file.
 ```
 #Inside src folder execute:
-usage: tiff_loader.py [-h] -i INPUT_IMAGE [-s INPUT_SHAPEFILE] -o OUTPUT_IMAGE```
+usage: tiff_loader.py [-h] -i INPUT_IMAGE [-s INPUT_SHAPEFILE] -o OUTPUT_IMAGE
+```
