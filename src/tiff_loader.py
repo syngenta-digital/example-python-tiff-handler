@@ -3,6 +3,7 @@ import rasterio
 from rasterio.mask import mask
 import shapely.geometry
 import shapely.ops
+from shapely.ops import transform
 import cv2
 import numpy as np
 import pyproj
@@ -21,8 +22,7 @@ class TiffLoader:
         """
         shape = None
         if shape_filename is not None:
-            image_crs = rasterio.open(image_filename).crs
-            shape = self.load_shape(shape_filename, image_crs)
+            shape = self.load_shape(shape_filename)
 
         self.tif_image, self.tif_transform, self.tif_meta = self.load_tif_image(image_filename, shape)
         self.png_image = self.create_png_image()
@@ -102,15 +102,21 @@ class TiffLoader:
         """
         tif_transform = None
         with rasterio.open(image_filename) as src:
+
+            crs_globe = pyproj.CRS('EPSG:4326')
+            crs_map = pyproj.CRS('EPSG:3857')
+            project = pyproj.Transformer.from_crs(crs_globe, crs_map, always_xy=True).transform
+            new_shape = transform(project, shape)
+
             if shape is not None:
-                tif_image, tif_transform = mask(src, [shape], crop=True)
+                tif_image, tif_transform = mask(src, [new_shape], crop=True)
             else:
                 tif_image = src.read()
             tif_meta = src.meta
         return tif_image, tif_transform, tif_meta
 
     @staticmethod
-    def load_shape(shape_filename: str, image_crs: rasterio.crs.CRS) -> \
+    def load_shape(shape_filename: str) -> \
             shapely.geometry.multipolygon.MultiPolygon:
         """
         Loads the shapefile.
@@ -120,8 +126,6 @@ class TiffLoader:
         unified_shapes: (shapely.geometry.multipolygon.MultiPolygon) multipolygon in shapely format
         """
         shapes = gpd.read_file(shape_filename)['geometry']
-        shapes = shapes.to_crs(image_crs)
-
         shapely_shapes = list()
         for i in range(0, len(shapes)):
             if shapely.geometry.shape(shapes[i]).is_valid:
