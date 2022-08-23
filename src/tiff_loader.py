@@ -21,10 +21,11 @@ class TiffLoader:
         :param shape_filename: (str) location and name of the shapefile
         """
         shape = None
+        shape_crs = None
         if shape_filename is not None:
-            shape = self.load_shape(shape_filename)
+            shape, shape_crs = self.load_shape(shape_filename)
 
-        self.tif_image, self.tif_transform, self.tif_meta = self.load_tif_image(image_filename, shape)
+        self.tif_image, self.tif_transform, self.tif_meta = self.load_tif_image(image_filename, shape, shape_crs)
         self.png_image = self.create_png_image()
 
     # -- SAVE/CREATE Methods
@@ -89,10 +90,11 @@ class TiffLoader:
         return self.png_image
 
     @staticmethod
-    def load_tif_image(image_filename: str, shape: shapely.geometry.multipolygon.MultiPolygon) -> \
-            (np.ndarray, affine.Affine, Dict):
+    def load_tif_image(image_filename: str, shape: shapely.geometry.multipolygon.MultiPolygon,
+                       shape_crs: pyproj.crs.crs.CRS) -> (np.ndarray, affine.Affine, Dict):
         """
         Loads the TIFF image and mask it with shapefile.
+        :param shape_crs: (pyproj.crs.crs.CRS) coordinate reference system associated to the shape
         :param image_filename: (str) location and name of the TIFF image
         :param shape: (shapely.geometry.multipolygon.MultiPolygon) shapefile related to the area
         :return:
@@ -102,13 +104,11 @@ class TiffLoader:
         """
         tif_transform = None
         with rasterio.open(image_filename) as src:
-
-            crs_globe = pyproj.CRS('EPSG:4326')
-            crs_map = pyproj.CRS('EPSG:3857')
-            project = pyproj.Transformer.from_crs(crs_globe, crs_map, always_xy=True).transform
-            new_shape = transform(project, shape)
-
             if shape is not None:
+                new_shape = shape
+                if shape_crs != src.crs:
+                    project = pyproj.Transformer.from_crs(shape_crs, src.crs, always_xy=True).transform
+                    new_shape = transform(project, shape)
                 tif_image, tif_transform = mask(src, [new_shape], crop=True)
             else:
                 tif_image = src.read()
@@ -117,13 +117,14 @@ class TiffLoader:
 
     @staticmethod
     def load_shape(shape_filename: str) -> \
-            shapely.geometry.multipolygon.MultiPolygon:
+            (shapely.geometry.multipolygon.MultiPolygon, pyproj.crs.crs.CRS):
         """
         Loads the shapefile.
         :param shape_filename: (str) location and name of shapefile
         :param image_crs: (rasterio.crs.CRS) coordinate reference system associated to the image
         :return:
         unified_shapes: (shapely.geometry.multipolygon.MultiPolygon) multipolygon in shapely format
+        shapes_crs: (pyproj.crs.crs.CRS) coordinate reference system associated to the shape
         """
         shapes = gpd.read_file(shape_filename)['geometry']
         shapely_shapes = list()
@@ -135,7 +136,7 @@ class TiffLoader:
         for i in range(0, len(shapely_shapes)):
             unified_shape = unified_shape.union(shapely_shapes[i])
 
-        return unified_shape
+        return unified_shape, shapes.crs
 
     @staticmethod
     def check_projections(image_filename: str, shape_filename: str) -> (pyproj.crs.crs.CRS, rasterio.crs.CRS):
